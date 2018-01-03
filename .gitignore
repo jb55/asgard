@@ -1,0 +1,5 @@
+/rustydiced
+*.hi
+*.o
+/TAGS
+/tags

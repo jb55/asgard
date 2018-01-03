@@ -14,8 +14,9 @@ import Network.Socket (socket, Family(AF_UNIX), SocketType(Stream), connect,
                        SockAddr(SockAddrUnix))
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as Lazy
 
-sockRequest :: RPCConfig -> ByteString -> IO (Maybe ByteString)
+sockRequest :: RPCConfig -> ByteString -> IO (Maybe Lazy.ByteString)
 sockRequest RPCConfig{..} bs = timeout tout $ do
   soc <- socket AF_UNIX Stream 0
   connect soc (SockAddrUnix rpcPath)
@@ -23,7 +24,7 @@ sockRequest RPCConfig{..} bs = timeout tout $ do
   readAll soc
   where
     tout        = fromMaybe defaultTimeout rpcTimeout
-    readAll soc = fmap (mconcat . Prelude.reverse) (readChunks soc [])
+    readAll soc = fmap (Lazy.fromChunks . Prelude.reverse) (readChunks soc [])
     readChunks soc chunks =
       do chunk <- recv soc 4096
          let cs = chunk:chunks
