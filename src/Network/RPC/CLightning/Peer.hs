@@ -6,8 +6,9 @@
 
 module Network.RPC.CLightning.Peer
     ( Peer(..)
-    , GetPeersResp(..)
-    , GetPeers(..)
+    , PeerChan(..)
+    , ListPeersResp(..)
+    , ListPeers(..)
     , ShortId(..)
     ) where
 
@@ -20,35 +21,52 @@ import Network.RPC.Common
 import Network.RPC.CLightning.Request (makeRequest)
 import Data.Text (Text)
 
+data PeerChan = PeerChan {
+      peerChanState       :: PeerState
+    , peerChanOwner       :: Maybe Text
+    , peerChanId          :: Maybe ShortId
+    , peerChanMSatsToUs   :: Maybe MSats
+    , peerChanMSatsTotal  :: Maybe MSats
+    , peerChanFundingTxId :: Maybe Text
+    } deriving Show
+
 data Peer = Peer {
-    peerAddress    :: [Text]
-  , peerState      :: PeerState
-  , peerConnected  :: Bool
-  , peerChanShortId :: ShortId
-  , peerMSatsToUs  :: MSats
-  , peerMSatsTotal :: MSats
+    peerAddress     :: Maybe [Text]
+  , peerId          :: Text
+  , peerConnected   :: Bool
+  , peerChannels    :: [PeerChan]
   } deriving Show
 
 instance FromJSON Peer where
   parseJSON (Object obj) =
-    Peer <$> obj .: "netaddr"
-         <*> obj .: "state"
-         <*> obj .: "connected"
-         <*> obj .: "channel"
-         <*> obj .: "msatoshi_to_us"
-         <*> obj .: "msatoshi_total"
+    Peer
+      <$> obj .:? "netaddr"
+      <*> obj .:  "id"
+      <*> obj .:  "connected"
+      <*> obj .:  "channels"
 
-newtype GetPeersResp = GetPeersResp { getPeersResp :: [Peer] }
-  deriving Show
-
-data GetPeers = GetPeers
-  deriving Show
-
-instance ToJSON GetPeers where
-  toJSON _ = makeRequest "getpeers"
-
-instance FromJSON GetPeersResp where
+instance FromJSON PeerChan where
   parseJSON (Object obj) =
-    GetPeersResp <$> obj .: "peers"
+    PeerChan
+      <$> obj .:  "state"
+      <*> obj .:? "owner"
+      <*> obj .:? "short_channel_id"
+      <*> obj .:? "msatoshi_to_us"
+      <*> obj .:? "msatoshi_total"
+      <*> obj .:? "funding_txid"
 
-type instance Resp GetPeers = GetPeersResp
+
+newtype ListPeersResp = ListPeersResp { getPeersResp :: [Peer] }
+  deriving Show
+
+data ListPeers = ListPeers
+  deriving Show
+
+instance ToJSON ListPeers where
+  toJSON _ = makeRequest "listpeers"
+
+instance FromJSON ListPeersResp where
+  parseJSON (Object obj) =
+    ListPeersResp <$> obj .: "peers"
+
+type instance Resp ListPeers = ListPeersResp

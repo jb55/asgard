@@ -1,6 +1,6 @@
 
 rustydiced: Main.hs
-	ghc -O -o $@ $<
+	ghc -O -isrc -o $@ $<
 
 tags: TAGS
 

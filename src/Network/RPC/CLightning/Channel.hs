@@ -5,8 +5,8 @@
 
 module Network.RPC.CLightning.Channel
     ( Channel(..)
-    , GetChannels(..)
-    , GetChannelsResp(..)
+    , ListChannels(..)
+    , ListChannelsResp(..)
     ) where
 
 import Data.Aeson
@@ -38,17 +38,17 @@ instance FromJSON Channel where
             <*> obj .:? "fee_per_millionth"
             <*> obj .:? "delay"
 
-instance FromJSON GetChannelsResp where
+instance FromJSON ListChannelsResp where
   parseJSON (Object obj) =
-    GetChannelsResp <$> obj .: "channels"
+    ListChannelsResp <$> obj .: "channels"
 
-newtype GetChannelsResp = GetChannelsResp { getChannelsResp :: [Channel] }
+newtype ListChannelsResp = ListChannelsResp { getChannelsResp :: [Channel] }
   deriving Show
 
-data GetChannels = GetChannels
+data ListChannels = ListChannels
   deriving Show
 
-type instance Resp GetChannels = GetChannelsResp
+type instance Resp ListChannels = ListChannelsResp
 
-instance ToJSON GetChannels where
+instance ToJSON ListChannels where
   toJSON _ = makeRequest "getchannels"

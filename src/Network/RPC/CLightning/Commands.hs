@@ -6,10 +6,10 @@
 
 module Network.RPC.CLightning.Commands
     ( CRPCResp(..)
-    , GetPeers(..)
-    , GetPeersResp(..)
-    , GetChannels(..)
-    , GetChannelsResp(..)
+    , ListPeers(..)
+    , ListPeersResp(..)
+    , ListChannels(..)
+    , ListChannelsResp(..)
     ) where
 
 import Network.RPC.Common (Resp)

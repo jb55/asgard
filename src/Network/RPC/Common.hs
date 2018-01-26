@@ -19,6 +19,9 @@ defaultTimeout :: Int
 defaultTimeout = 5*1000000
 
 newtype ShortId = ShortId { getShortId :: Text }
-  deriving (Show, IsString, FromJSON, ToJSON, Ord, Eq)
+  deriving (IsString, FromJSON, ToJSON, Ord, Eq)
+
+instance Show ShortId where
+    show (ShortId t) = show t
 
 type family Resp a :: *

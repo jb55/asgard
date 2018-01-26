@@ -1,5 +1,7 @@
 /rustydiced
 *.hi
+*.dyn_o
+*.dyn_hi
 *.o
 /TAGS
 /tags
