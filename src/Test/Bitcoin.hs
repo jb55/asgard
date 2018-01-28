@@ -5,25 +5,18 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Test.Bitcoin (Bitcoin, initBitcoin) where
+module Test.Bitcoin  where
 
-import Control.Monad (unless, (<=<), void)
+
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
-import Control.Exception (bracket)
-import UnliftIO (MonadUnliftIO)
-import Control.Concurrent (forkIO)
 import Data.Aeson
-import Data.ByteString (ByteString, hGetLine)
+import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (hPutStrLn)
-import Data.ByteString.Short (ShortByteString)
-import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
 import Data.Word (Word16, Word8)
 import Network.HTTP.Client
-import Network.HTTP.Types
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), openFile, hClose, Handle)
@@ -32,19 +25,19 @@ import System.Posix.Types (CPid)
 import System.Process
 import System.Process.Internals
 import System.Timeout (timeout)
-
 import Text.Printf (printf)
+import UnliftIO (MonadUnliftIO)
 
-import Network.Bitcoin.Api.Wallet
-import Network.Bitcoin.Api.Client (Client(..))
+
+
 
 import qualified Data.ByteString.Char8 as B8
 import qualified System.Process as P
-import qualified UnliftIO.Concurrent as UIO
+
 import qualified UnliftIO.Exception as UIO
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString.Base64 as B64
-import qualified Data.Text.Encoding as TE
+
 import qualified Data.Text as T
 
 data BitcoinRPC =
@@ -65,6 +58,8 @@ data Bitcoin =
   } deriving Show
 
 -- | returns Just pid or Nothing if process has already exited
+
+getPid :: ProcessHandle -> IO (Maybe PHANDLE)
 getPid ph = withProcessHandle ph go
   where
     go ph_ = case ph_ of
@@ -103,8 +98,7 @@ initBitcoin dir port = liftIO $ do
 
   manager <- newManager defaultManagerSettings
 
-  let btcConfig = regtestdir </> "bitcoin.conf"
-      host      = "localhost"
+  let host      = "localhost"
       user      = "rpcuser"
       pass      = "rpcpass"
       intport   = fromIntegral port
@@ -130,15 +124,15 @@ startBitcoin Bitcoin{..} = do
   stdout <- maybe (fail "Could not open bitcoind stdout") return mstdout
   pid    <- maybe (fail "Could not grab bitcoind pid") return mpid
 
-  let p = BitcoinProc {
+  let btcproc = BitcoinProc {
       bitcoinStdout     = stdout
     , bitcoinProcess    = procHandle
     , bitcoinProcessPID = fromIntegral pid
     }
 
-  $(logInfo) ("Starting " <> T.pack (show p))
+  $(logInfo) ("Starting " <> T.pack (show btcproc))
 
-  return p
+  return btcproc
 
 
 log :: ByteString -> IO ()
@@ -209,7 +203,7 @@ call BitcoinRPC{..} method params =
         let body = responseBody res
         case JSON.eitherDecode body of
           Left e -> fail ("Could not decode JSON: \n\n" <> e <> "\n\n" <> show body )
-          Right res  -> return (jrpcResult res)
+          Right jrpcres  -> return (jrpcResult jrpcres)
 
 getnewaddress :: BitcoinRPC -> IO Text
 getnewaddress rpc = call rpc "getnewaddress" (mempty :: Array)
@@ -221,7 +215,7 @@ generatetoaddress rpc nblocks addr =
 generateBlocks :: BitcoinRPC -> Int -> IO [Text]
 generateBlocks rpc nblocks = do
   addr <- getnewaddress rpc
-  generatetoaddress rpc 5 addr
+  generatetoaddress rpc nblocks addr
 
 
 
@@ -241,7 +235,7 @@ withBitcoin cb = UIO.bracket start stop cb
       btc   <- initBitcoin "/tmp/bitcointest" 7888
       bproc <- startBitcoin btc
       return (btc, bproc)
-    stop (btc, bproc) = stopBitcoin bproc
+    stop (_, bproc) = stopBitcoin bproc
 
 
 test :: IO ()
