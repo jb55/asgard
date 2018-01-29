@@ -20,6 +20,7 @@ import Text.Regex.Base.RegexLike (matchTest, makeRegex)
 import Text.Regex.TDFA.ByteString (Regex)
 import UnliftIO (MonadUnliftIO(..))
 
+import Regex.ToTDFA
 
 import qualified UnliftIO.Exception as UIO
 import qualified UnliftIO.Timeout as UIO
@@ -45,15 +46,6 @@ type TailResult a = Either TailError a
 
 newtype TailableM m a = TailableM { runTailable_ :: StateT Tailable m a }
     deriving (Functor, Applicative, Monad, MonadState Tailable, MonadIO)
-
-class ToTDFA a where
-    toTDFA :: a -> Regex
-
-instance ToTDFA Regex where
-    toTDFA r = r
-
-instance ToTDFA ByteString where
-    toTDFA bs = makeRegex bs
 
 runTailable :: Tailable -> TailableM m a -> m (a, Tailable)
 runTailable t = flip runStateT t . runTailable_

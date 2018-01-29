@@ -30,6 +30,8 @@ import qualified Data.Text as T
 import qualified System.Process as P
 import qualified UnliftIO.Exception as UIO
 
+import Regex.ToTDFA
+
 import Test.JsonRPC
 import Test.Proc
 import Test.Tailable hiding (timeout)
@@ -99,9 +101,6 @@ startBitcoin BitcoinD{..} = do
 
   return (BitcoinProc btcproc)
 
-bs :: ByteString -> ByteString
-bs s = s
-
 stopBitcoin :: MonadLoggerIO m => BitcoinProc -> m ()
 stopBitcoin (BitcoinProc b@Proc{..}) = do
   $(logInfo) ("Terminating " <> T.pack (show b))
@@ -150,7 +149,7 @@ withBitcoin cb = UIO.bracket start stop cb
 
 waitForLoaded :: MonadIO m => BitcoinProc -> m ()
 waitForLoaded (BitcoinProc Proc{..}) =
-  evalTailable t (waitForLogs [ bs "Done loading" ])
+  evalTailable t (waitForLogs [ bstr "Done loading" ])
   where
     t = defaultTailable procStdout
 
