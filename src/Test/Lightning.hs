@@ -61,6 +61,7 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
         , "--bitcoind-poll=1s"
         , "--cltv-delta=6"
         , "--cltv-final=5"
+        -- NOTE: this should only be set when DEVELOPER=1
         , "--dev-broadcast-interval=1000"
         , "--ignore-fee-limits=false"
         , "--locktime-blocks=5"
