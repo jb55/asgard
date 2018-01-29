@@ -7,7 +7,6 @@ module Network.RPC.Internal
     ( sockRequest
     ) where
 
-import Data.DList (DList(..))
 import Data.ByteString
 import Data.Maybe (fromMaybe)
 import Network.RPC.Common (defaultTimeout)

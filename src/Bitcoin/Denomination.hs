@@ -4,6 +4,8 @@ module Bitcoin.Denomination
     ( Denomination(..)
     , MSats(..)
     , Sats(..)
+    , Bits(..)
+    , bits, msats, sats, toBits
     ) where
 
 import Data.Aeson
@@ -24,7 +26,7 @@ newtype Bits = Bits { getBits :: Rational }
   deriving (FromJSON, ToJSON, Num, Ord, Eq)
 
 instance Denomination MSats where
-  toMsats (MSats msats) = toRational msats
+  toMsats (MSats msats_) = toRational msats_
 
 bitsSize :: Num a => a
 bitsSize = 100000
@@ -33,7 +35,7 @@ instance Denomination Bits where
   toMsats (Bits bitz) = bitz * bitsSize
 
 instance Denomination Sats where
-  toMsats (Sats sats) = sats * 1000
+  toMsats (Sats sats_) = sats_ * 1000
 
 bits :: Rational -> Bits
 bits = Bits

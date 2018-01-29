@@ -37,10 +37,12 @@ instance FromJSON Channel where
             <*> obj .:? "base_fee_millisatoshi"
             <*> obj .:? "fee_per_millionth"
             <*> obj .:? "delay"
+  parseJSON _ = fail "Channel is not an object"
 
 instance FromJSON ListChannelsResp where
   parseJSON (Object obj) =
     ListChannelsResp <$> obj .: "channels"
+  parseJSON _ = fail "ListChannelsResp is not an object"
 
 newtype ListChannelsResp = ListChannelsResp { getChannelsResp :: [Channel] }
   deriving Show

@@ -13,8 +13,6 @@ module Network.RPC.CLightning.Peer
     ) where
 
 import Data.Aeson
-import Data.String (IsString)
-import Data.ByteString (ByteString)
 import Bitcoin.Denomination (MSats)
 import Network.RPC.PeerState (PeerState)
 import Network.RPC.Common
@@ -44,6 +42,7 @@ instance FromJSON Peer where
       <*> obj .:  "id"
       <*> obj .:  "connected"
       <*> obj .:  "channels"
+  parseJSON _ = fail "Peer is not an object"
 
 instance FromJSON PeerChan where
   parseJSON (Object obj) =
@@ -54,6 +53,7 @@ instance FromJSON PeerChan where
       <*> obj .:? "msatoshi_to_us"
       <*> obj .:? "msatoshi_total"
       <*> obj .:? "funding_txid"
+  parseJSON _ = fail "PeerChan is not an object"
 
 
 newtype ListPeersResp = ListPeersResp { getPeersResp :: [Peer] }
@@ -68,5 +68,6 @@ instance ToJSON ListPeers where
 instance FromJSON ListPeersResp where
   parseJSON (Object obj) =
     ListPeersResp <$> obj .: "peers"
+  parseJSON _ = fail "ListPeersResp is not an object"
 
 type instance Resp ListPeers = ListPeersResp

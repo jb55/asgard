@@ -12,7 +12,6 @@ module Network.RPC.CLightning.Commands
     , ListChannelsResp(..)
     ) where
 
-import Network.RPC.Common (Resp)
 import Network.RPC.CLightning.Peer
 import Network.RPC.CLightning.Channel
 import Data.Aeson
@@ -23,4 +22,5 @@ newtype CRPCResp a = CRPCResp { getCRPCResp :: a }
 instance FromJSON a => FromJSON (CRPCResp a) where
   parseJSON (Object obj) =
     CRPCResp <$> obj .: "result"
+  parseJSON _ = fail "CRPCRsp is not an object"
 

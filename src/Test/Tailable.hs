@@ -16,7 +16,7 @@ import Control.Monad.State.Strict (StateT(..), MonadState(..), evalStateT)
 import Data.ByteString (hGetLine, ByteString)
 import Data.Maybe (fromMaybe)
 import System.IO hiding (hGetLine)
-import Text.Regex.Base.RegexLike (matchTest, makeRegex)
+import Text.Regex.Base.RegexLike (matchTest)
 import Text.Regex.TDFA.ByteString (Regex)
 import UnliftIO (MonadUnliftIO(..))
 

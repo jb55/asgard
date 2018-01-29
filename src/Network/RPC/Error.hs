@@ -52,9 +52,6 @@ readError = rpcErrStr ReadError
 writeError :: ByteString -> RPCError
 writeError = rpcErrStr WriteError
 
-note :: a -> Maybe b -> Either a b
-note a = maybe (Left a) Right
-
 timeout :: Int -> IO (Either RPCError a) -> IO (Either RPCError a)
 timeout tout io = do
   mres <- Sys.timeout tout io

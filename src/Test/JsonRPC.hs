@@ -52,6 +52,7 @@ instance FromJSON a => FromJSON (JsonRPCRes a) where
           <$> obj .:  "result"
           <*> obj .:? "error"
           <*> obj .:  "id"
+    parseJSON _ = fail "JsonRPCRes is not an object"
 
 call :: (ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> IO b
 call JsonRPC{..} method params =

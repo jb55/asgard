@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Network.RPC.Common
-    ( Resp(..)
+    ( Resp
     , defaultTimeout
     , ShortId(..)
     ) where
