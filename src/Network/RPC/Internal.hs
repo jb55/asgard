@@ -11,7 +11,7 @@ import Data.DList (DList(..))
 import Data.ByteString
 import Data.Maybe (fromMaybe)
 import Network.RPC.Common (defaultTimeout)
-import Network.RPC.Config (RPCConfig(..))
+import Network.RPC.Config (SocketConfig(..))
 import Network.RPC.Error
 import Network.Socket.ByteString
 import Network.Socket (socket, Family(AF_UNIX), SocketType(Stream), connect,
@@ -21,8 +21,8 @@ import qualified Data.ByteString as BS
 import qualified Data.DList as DL
 import qualified Data.ByteString.Lazy as Lazy
 
-sockRequest :: RPCConfig -> ByteString -> IO (Either RPCError Lazy.ByteString)
-sockRequest RPCConfig{..} bs = timeout tout $ do
+sockRequest :: SocketConfig -> ByteString -> IO (Either RPCError Lazy.ByteString)
+sockRequest SocketConfig{..} bs = timeout tout $ do
   soc <- socket AF_UNIX Stream 0
   catching connectionError (connect soc (SockAddrUnix rpcPath))
   catching writeError (sendAll soc bs)

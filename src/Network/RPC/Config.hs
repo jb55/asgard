@@ -1,10 +1,10 @@
 
 module Network.RPC.Config
-    ( RPCConfig(..)
+    ( SocketConfig(..)
     ) where
 
-data RPCConfig =
-  RPCConfig {
+data SocketConfig =
+  SocketConfig {
     rpcPath    :: FilePath
   , rpcTimeout :: Maybe Int
   }

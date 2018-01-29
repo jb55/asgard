@@ -8,8 +8,8 @@ import Network.RPC.Common
 import Data.Aeson
 import Network.RPC.Error
 
-cfg :: RPCConfig
-cfg = RPCConfig "/home/jb55/.lightning/lightning-rpc" Nothing
+cfg :: SocketConfig
+cfg = SocketConfig "/home/jb55/.lightning/lightning-rpc" Nothing
 
 rpc
   :: (ToJSON a, FromJSON (Resp a)) => a -> IO (Either RPCError (Resp a))
