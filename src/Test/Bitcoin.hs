@@ -7,17 +7,16 @@
 
 module Test.Bitcoin  where
 
-
+import Text.Printf (printf)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
+import Control.Concurrent (threadDelay)
 import Data.Aeson
-import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (hPutStrLn)
+import Data.ByteString (ByteString)
 import Data.Monoid ((<>))
 import Data.Text (Text)
-import Data.Word (Word16, Word8)
-import Network.HTTP.Client
-import System.Directory (createDirectoryIfMissing)
+import Data.Word (Word16)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), openFile, hClose, Handle)
 import System.Posix.Signals (signalProcess)
@@ -25,40 +24,27 @@ import System.Posix.Types (CPid)
 import System.Process
 import System.Process.Internals
 import System.Timeout (timeout)
-import Text.Printf (printf)
 import UnliftIO (MonadUnliftIO)
-
-
-
+import Network.HTTP.Client (newManager, defaultManagerSettings)
 
 import qualified Data.ByteString.Char8 as B8
-import qualified System.Process as P
-
-import qualified UnliftIO.Exception as UIO
-import qualified Data.Aeson as JSON
-import qualified Data.ByteString.Base64 as B64
-
 import qualified Data.Text as T
+import qualified System.Process as P
+import qualified UnliftIO.Exception as UIO
 
-data BitcoinRPC =
-  BitcoinRPC {
-      btcrpcManager  :: Manager
-    , btcrpcReq :: Request
-    }
+import Test.JsonRPC
+import Test.Tailable hiding (timeout)
 
-instance Show BitcoinRPC where
-  show BitcoinRPC{..} = printf "BitcoinRPC [%s]" (show btcrpcReq)
 
 data Bitcoin =
   Bitcoin {
       bitcoinDir  :: FilePath
     , bitcoinPort :: !Word16
     , bitcoinArgs :: [String]
-    , bitcoinRPC  :: BitcoinRPC
+    , bitcoinRPC  :: JsonRPC
   } deriving Show
 
 -- | returns Just pid or Nothing if process has already exited
-
 getPid :: ProcessHandle -> IO (Maybe PHANDLE)
 getPid ph = withProcessHandle ph go
   where
@@ -85,14 +71,12 @@ initBitcoin dir port = liftIO $ do
       confPath    = dir        </> "bitcoin.conf"
       cmdline = [
           "-datadir=" ++ dir
-        , "-printtoconsole"
         , "-server"
+        , "-printtoconsole"
         , "-regtest"
         --, "-debug"
         , "-logtimestamps"
         ]
-
-  createDirectoryIfMissing True regtestdir
   writeConfig regConfPath port
   writeConfig confPath port
 
@@ -132,13 +116,14 @@ startBitcoin Bitcoin{..} = do
 
   $(logInfo) ("Starting " <> T.pack (show btcproc))
 
+  let tail = defaultTailable stdout
+  res <- runTailable tail (waitForLogs [ bs "Done loading" ])
+  $(logDebug) ("Tailed log result " <> T.pack (show res))
+
   return btcproc
 
-
-log :: ByteString -> IO ()
-log = B8.putStrLn
-
-
+bs :: ByteString -> ByteString
+bs s = s
 
 stopBitcoin :: MonadLoggerIO m => BitcoinProc -> m ()
 stopBitcoin b@BitcoinProc{..} = do
@@ -155,68 +140,17 @@ stopBitcoin b@BitcoinProc{..} = do
 
 
 
-makeClient :: Manager -> ByteString -> Word16 -> ByteString -> ByteString -> BitcoinRPC
-makeClient manager host port user pass =
-  let
-      authStr = B64.encode (user <> ":" <> pass)
-      headers = [("Authorization", "Basic " <> authStr)]
-
-      req = defaultRequest {
-              host           = host
-            , port           = fromIntegral port
-            , method         = "POST"
-            , requestHeaders = headers
-            }
-
-  in BitcoinRPC manager req
-
-
-data JsonRPC a = JsonRPC {
-      jrpcResult :: a
-    , jrpcError  :: Maybe Text
-    , jrpcId     :: Int
-    }
-    deriving Show
-
-instance FromJSON a => FromJSON (JsonRPC a) where
-    parseJSON (Object obj) =
-        JsonRPC <$> obj .:  "result"
-                <*> obj .:? "error"
-                <*> obj .:  "id"
-
-call :: (ToJSON a, FromJSON b) => BitcoinRPC -> Text -> a -> IO b
-call BitcoinRPC{..} method params =
-    let
-        reqData =
-            object [ "jsonrpc" .= T.pack "2.0"
-                   , "method"  .= method
-                   , "params"  .= params
-                   , "id"      .= (1 :: Word8)
-                  ]
-        req =
-            btcrpcReq {
-              requestBody = RequestBodyLBS (JSON.encode reqData)
-            }
-    in
-      do
-        res <- httpLbs req btcrpcManager
-        let body = responseBody res
-        case JSON.eitherDecode body of
-          Left e -> fail ("Could not decode JSON: \n\n" <> e <> "\n\n" <> show body )
-          Right jrpcres  -> return (jrpcResult jrpcres)
-
-getnewaddress :: BitcoinRPC -> IO Text
+getnewaddress :: JsonRPC -> IO Text
 getnewaddress rpc = call rpc "getnewaddress" (mempty :: Array)
 
-generatetoaddress :: BitcoinRPC -> Int -> Text -> IO [Text]
+generatetoaddress :: JsonRPC -> Int -> Text -> IO [Text]
 generatetoaddress rpc nblocks addr =
   call rpc "generatetoaddress" [toJSON nblocks, toJSON addr]
 
-generateBlocks :: BitcoinRPC -> Int -> IO [Text]
+generateBlocks :: JsonRPC -> Int -> IO [Text]
 generateBlocks rpc nblocks = do
   addr <- getnewaddress rpc
   generatetoaddress rpc nblocks addr
-
 
 
 writeConfig :: FilePath -> Word16 -> IO ()
@@ -238,8 +172,8 @@ withBitcoin cb = UIO.bracket start stop cb
     stop (_, bproc) = stopBitcoin bproc
 
 
-test :: IO ()
-test = runStderrLoggingT $ withBitcoin $ \(btc,_) -> do
+testbtc :: IO ()
+testbtc = runStderrLoggingT $ withBitcoin $ \(btc,_) -> do
   let rpc = bitcoinRPC btc
-  addr <- liftIO (generateBlocks rpc 1)
+  addr <- liftIO (generateBlocks rpc 5)
   liftIO (print addr)
