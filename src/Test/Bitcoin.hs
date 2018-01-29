@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Test.Bitcoin  where
+module Test.BitcoinD  where
 
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
@@ -19,13 +19,10 @@ import Data.Text (Text)
 import Data.Word (Word16)
 import Network.HTTP.Client (newManager, defaultManagerSettings)
 import System.FilePath ((</>))
-import System.IO (IOMode(WriteMode), openFile, hClose, Handle)
+import System.IO (IOMode(WriteMode), openFile, hClose)
 import System.Posix.Signals (signalProcess)
-import System.Posix.Types (CPid)
-import System.Process
-import System.Process.Internals
 import System.Timeout (timeout)
-import Text.Printf (printf)
+import System.Process
 import UnliftIO (MonadUnliftIO)
 
 import qualified Data.ByteString.Char8 as B8
@@ -34,38 +31,19 @@ import qualified System.Process as P
 import qualified UnliftIO.Exception as UIO
 
 import Test.JsonRPC
+import Test.Proc
 import Test.Tailable hiding (timeout)
 
 
-data Bitcoin =
-  Bitcoin {
+data BitcoinD =
+  BitcoinD {
       bitcoinDir  :: FilePath
     , bitcoinPort :: !Word16
     , bitcoinArgs :: [String]
     , bitcoinRPC  :: JsonRPC
   } deriving Show
 
--- | returns Just pid or Nothing if process has already exited
-getPid :: ProcessHandle -> IO (Maybe PHANDLE)
-getPid ph = withProcessHandle ph go
-  where
-    go ph_ = case ph_ of
-               OpenHandle x   -> return $ Just x
-               ClosedHandle _ -> return Nothing
-
-
-data BitcoinProc =
-  BitcoinProc {
-      bitcoinStdout     :: Handle
-    , bitcoinProcess    :: ProcessHandle
-    , bitcoinProcessPID :: CPid
-    }
-
-instance Show BitcoinProc where
-  show BitcoinProc{..} =
-      printf "BitcoinProc [%d]" (fromIntegral bitcoinProcessPID :: Int)
-
-initBitcoin :: MonadIO m => FilePath -> Word16 -> m Bitcoin
+initBitcoin :: MonadIO m => FilePath -> Word16 -> m BitcoinD
 initBitcoin dir port = liftIO $ do
   let regtestdir  = dir        </> "regtest"
       regConfPath = regtestdir </> "bitcoin.conf"
@@ -89,30 +67,30 @@ initBitcoin dir port = liftIO $ do
       intport   = fromIntegral port
       rpc       = makeClient manager host intport user pass
 
-  return (Bitcoin {
+  return BitcoinD {
            bitcoinDir  = dir
          , bitcoinPort = port
          , bitcoinRPC  = rpc
          , bitcoinArgs = cmdline
-         })
+         }
 
 
-startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => Bitcoin -> m BitcoinProc
-startBitcoin Bitcoin{..} = do
+startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => BitcoinD -> m Proc
+startBitcoin BitcoinD{..} = do
   let p = (P.proc "bitcoind" bitcoinArgs) { std_out = CreatePipe
                                           , close_fds = False
                                           }
 
-  (_, mstdout, _, procHandle) <- liftIO $ createProcess_ "bitcoind" p
-  mpid <- liftIO $ getPid procHandle
+  (_, mstdout, _, pHandle) <- liftIO $ createProcess_ "bitcoind" p
+  mpid <- liftIO $ getPid pHandle
 
   stdout <- maybe (fail "Could not open bitcoind stdout") return mstdout
   pid    <- maybe (fail "Could not grab bitcoind pid") return mpid
 
-  let btcproc = BitcoinProc {
-      bitcoinStdout     = stdout
-    , bitcoinProcess    = procHandle
-    , bitcoinProcessPID = fromIntegral pid
+  let btcproc = Proc {
+      procStdout = stdout
+    , procHandle = pHandle
+    , procPID    = fromIntegral pid
     }
 
   $(logInfo) ("Starting " <> T.pack (show btcproc))
@@ -122,18 +100,18 @@ startBitcoin Bitcoin{..} = do
 bs :: ByteString -> ByteString
 bs s = s
 
-stopBitcoin :: MonadLoggerIO m => BitcoinProc -> m ()
-stopBitcoin b@BitcoinProc{..} = do
+stopBitcoin :: MonadLoggerIO m => Proc -> m ()
+stopBitcoin b@Proc{..} = do
   $(logInfo) ("Terminating " <> T.pack (show b))
-  liftIO $ terminateProcess bitcoinProcess
-  ma <- liftIO $ timeout (30 * 1000000) (waitForProcess bitcoinProcess)
+  liftIO $ terminateProcess procHandle
+  ma <- liftIO $ timeout (30 * 1000000) (waitForProcess procHandle)
   maybe timedOut (return . const ()) ma
-  liftIO $ hClose bitcoinStdout
+  liftIO $ hClose procStdout
   where
     timedOut :: MonadLoggerIO m => m ()
     timedOut = do
-      $(logInfo) "Bitcoin process timed out while try to close. Killing."
-      liftIO (signalProcess 9 bitcoinProcessPID)
+      $(logInfo) "BitcoinD process timed out while try to close. Killing."
+      liftIO (signalProcess 9 procPID)
 
 
 
@@ -159,7 +137,7 @@ writeConfig file port = do
   hClose handle
 
 withBitcoin :: (MonadUnliftIO m, MonadLoggerIO m)
-            => ((Bitcoin, BitcoinProc) -> m c) -> m c
+            => ((BitcoinD, Proc) -> m c) -> m c
 withBitcoin cb = UIO.bracket start stop cb
   where
     start = do
@@ -168,11 +146,11 @@ withBitcoin cb = UIO.bracket start stop cb
       return (btc, bproc)
     stop (_, bproc) = stopBitcoin bproc
 
-waitForLoaded :: MonadIO m => BitcoinProc -> m ()
-waitForLoaded BitcoinProc{..} =
+waitForLoaded :: MonadIO m => Proc -> m ()
+waitForLoaded Proc{..} =
   evalTailable t (waitForLogs [ bs "Done loading" ])
   where
-    t = defaultTailable bitcoinStdout
+    t = defaultTailable procStdout
 
 testbtc :: IO ()
 testbtc = runStderrLoggingT $ withBitcoin $ \(btc,btcproc) -> do
