@@ -3,26 +3,30 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+import Control.Applicative ((<|>))
 import Control.Lens
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
-import Control.Applicative ((<|>))
 import Data.ByteString (ByteString)
-import Data.ByteString.Lens (IsByteString(packedBytes))
-import Data.Word (Word16, Word8)
-import Network.HTTP.Client (newManager, defaultManagerSettings)
-import Numeric.Lens (hex)
+import Data.Monoid ((<>))
+import Data.Word (Word16)
+import Network.RPC (rpcRequest, ListPeers(..))
+import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
+import System.Process
 import Text.Regex.TDFA
-import Text.Regex.TDFA.ByteString (regexec)
+import UnliftIO (MonadUnliftIO)
 
 import Regex.ToTDFA
 import Network.RPC.Config
 
-import Test.JsonRPC
+import Test.Tailable
 import Test.Proc
 
+import qualified System.Process as P
+import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as B8
+import qualified UnliftIO as UIO
 
 newtype BitcoinDir = BitcoinDir { bitcoindir :: FilePath }
     deriving Show
@@ -50,10 +54,11 @@ data HSM = RandomHSM
          | DeterministicHSM (Maybe Seed)
          deriving Show
 
-initLightning :: MonadLogger m => HSM -> BitcoinDir -> LightningDir -> Word16 -> m LightningD
+initLightning :: (MonadLogger m, MonadIO m)
+              => HSM -> BitcoinDir -> LightningDir -> Word16 -> m LightningD
 initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
   let mseed = B8.pack lightningdir =~ bstr "([^/]+)/*$"  :: [[ByteString]]
-      intport = fromIntegral port
+      -- intport = fromIntegral port
       -- TODO: parameterize
       cmdline = [
           "--bitcoin-datadir=" ++ bitcoindir
@@ -80,7 +85,6 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
                    (return . Just . Seed)
                    (mseed ^? ix 0 . ix 1)
 
-
   let cmds = cmdline ++
                case hsm of
                  RandomHSM -> []
@@ -90,13 +94,58 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
                      Just Seed{..} ->
                        ["--dev-hsm-seed=" ++ B8.unpack hsmseed]
 
-  return $ LightningD {
-                lightningDir    = ld
-              , lightningBtcDir = bd
-              , lightningPort   = port
-              , lightningArgs   = cmdline
-              , lightningRPC    = rpc
-              }
+  liftIO $ createDirectoryIfMissing True lightningdir
 
-        -- if not os.path.exists(lightning_dir):
-        --     os.makedirs(lightning_dir)
+  return LightningD {
+             lightningDir    = ld
+           , lightningBtcDir = bd
+           , lightningPort   = port
+           , lightningArgs   = cmds
+           , lightningRPC    = rpc
+           }
+
+startLightning :: (MonadUnliftIO m, MonadLoggerIO m) => LightningD -> m LightningProc
+startLightning LightningD{..} = do
+  let p = (P.proc "lightningd" lightningArgs)
+            { std_out = CreatePipe
+            , close_fds = False
+            }
+
+  (_, mstdout, _, pHandle) <- liftIO $ createProcess_ "lightningd/lightningd" p
+  mpid <- liftIO $ getPid pHandle
+
+  stdout <- maybe (fail "Could not open bitcoind stdout") return mstdout
+  pid    <- maybe (fail "Could not grab bitcoind pid") return mpid
+
+  let lnproc = Proc {
+      procStdout = stdout
+    , procHandle = pHandle
+    , procPID    = fromIntegral pid
+    }
+
+  logInfoN ("Starting " <> T.pack (show lnproc))
+
+  return (LightningProc lnproc)
+
+waitForLoaded :: MonadIO m => LightningProc -> m ()
+waitForLoaded (LightningProc Proc{..}) =
+  waitForLog procStdout "Hello world from"
+
+withLightning :: (MonadUnliftIO m, MonadLoggerIO m)
+              => ((LightningD, LightningProc) -> m c) -> m c
+withLightning cb = UIO.bracket start stop cb
+  where
+    lightningDir = LightningDir "/tmp/lightningtest"
+    bitcoinDir   = BitcoinDir "/tmp/bitcointest"
+    start = do
+      ln     <- initLightning RandomHSM bitcoinDir lightningDir 9785
+      lnproc <- startLightning ln
+      return (ln, lnproc)
+    stop (_, LightningProc p) = stopProc p
+
+testln :: IO ()
+testln = runStderrLoggingT $ withLightning $ \(ln,lnproc) -> do
+  let rpc = lightningRPC ln
+  waitForLoaded lnproc
+  resp <- liftIO (rpcRequest rpc ListPeers)
+  liftIO (print resp)

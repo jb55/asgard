@@ -80,8 +80,8 @@ waitForLogsH handle rs = liftIO $ foldM1_ folder rs
     readline     = hGetLine handle
     folder regex = untilM_ (matchTest regex <$> readline)
 
-waitForLogs :: (MonadIO m, ToTDFA b) => [b] -> TailableM m (TailResult ())
-waitForLogs rs = do
+waitForLogsM :: (MonadIO m, ToTDFA b) => [b] -> TailableM m (TailResult ())
+waitForLogsM rs = do
   t@Tailable{..} <- get
   isSeekable <- liftIO $ hIsSeekable tailHandle
   when isSeekable $
@@ -101,7 +101,7 @@ test = do
   h <- openFile "/tmp/haskelltest" ReadMode
   let tailable = defaultTailable h
       rs       = map toTDFA [".*OPENINGD.*", ".*CHANNELD_NORMAL.*" :: ByteString]
-  runTailable tailable (waitForLogs rs)
+  _ <- runTailable tailable (waitForLogsM rs)
   hClose h
 
 
@@ -131,3 +131,10 @@ timeoutError = tailErr Timeout Nothing
 
 noMatchError :: ByteString -> TailError
 noMatchError = tailErrStr MatchError
+
+
+waitForLog :: MonadIO m => Handle -> ByteString -> m ()
+waitForLog handle bs =
+  evalTailable t (waitForLogsM [ bs ])
+  where
+    t = defaultTailable handle
