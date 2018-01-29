@@ -11,7 +11,6 @@ module Test.BitcoinD  where
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
 import Data.Aeson
-import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (hPutStrLn)
 
 import Data.Monoid ((<>))
@@ -20,8 +19,6 @@ import Data.Word (Word16)
 import Network.HTTP.Client (newManager, defaultManagerSettings)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), openFile, hClose)
-import System.Posix.Signals (signalProcess)
-import System.Timeout (timeout)
 import System.Process
 import UnliftIO (MonadUnliftIO)
 
@@ -101,21 +98,6 @@ startBitcoin BitcoinD{..} = do
 
   return (BitcoinProc btcproc)
 
-stopBitcoin :: MonadLoggerIO m => BitcoinProc -> m ()
-stopBitcoin (BitcoinProc b@Proc{..}) = do
-  $(logInfo) ("Terminating " <> T.pack (show b))
-  liftIO $ terminateProcess procHandle
-  ma <- liftIO $ timeout (30 * 1000000) (waitForProcess procHandle)
-  maybe timedOut (return . const ()) ma
-  liftIO $ hClose procStdout
-  where
-    timedOut :: MonadLoggerIO m => m ()
-    timedOut = do
-      $(logInfo) "BitcoinD process timed out while try to close. Killing."
-      liftIO (signalProcess 9 procPID)
-
-
-
 getnewaddress :: JsonRPC -> IO Text
 getnewaddress rpc = call rpc "getnewaddress" (mempty :: Array)
 
@@ -145,17 +127,15 @@ withBitcoin cb = UIO.bracket start stop cb
       btc   <- initBitcoin "/tmp/bitcointest" 7888
       bproc <- startBitcoin btc
       return (btc, bproc)
-    stop (_, bproc) = stopBitcoin bproc
+    stop (_, BitcoinProc p) = stopProc p
 
 waitForLoaded :: MonadIO m => BitcoinProc -> m ()
 waitForLoaded (BitcoinProc Proc{..}) =
-  evalTailable t (waitForLogs [ bstr "Done loading" ])
-  where
-    t = defaultTailable procStdout
+  waitForLog procStdout "Done loading"
 
 testbtc :: IO ()
 testbtc = runStderrLoggingT $ withBitcoin $ \(btc,btcproc) -> do
   let rpc = bitcoinRPC btc
-  waitForLoaded btcproc
+  waitForLog (bitcoinStdout btcproc) "Done loading"
   addr <- liftIO (generateBlocks rpc 5)
   liftIO (print addr)
