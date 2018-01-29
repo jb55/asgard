@@ -5,6 +5,8 @@
 
 import Control.Lens
 import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Monad.Logger
+import Control.Applicative ((<|>))
 import Data.ByteString (ByteString)
 import Data.ByteString.Lens (IsByteString(packedBytes))
 import Data.Word (Word16, Word8)
@@ -48,7 +50,7 @@ data HSM = RandomHSM
          | DeterministicHSM (Maybe Seed)
          deriving Show
 
-initLightning :: HSM -> BitcoinDir -> LightningDir -> Word16 -> Maybe LightningD
+initLightning :: MonadLogger m => HSM -> BitcoinDir -> LightningDir -> Word16 -> m LightningD
 initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
   let mseed = B8.pack lightningdir =~ bstr "([^/]+)/*$"  :: [[ByteString]]
       intport = fromIntegral port
@@ -74,20 +76,19 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
             , rpcTimeout = Just (10 * 1000000)
             }
 
-  seed <- mseed ^? ix 0 . ix 1
+  dirseed <- maybe (logWarnN "no seed found in lightning dir" >> return Nothing)
+                   (return . Just . Seed)
+                   (mseed ^? ix 0 . ix 1)
+
 
   let cmds = cmdline ++
                case hsm of
                  RandomHSM -> []
-                 DeterministicHSM mseed ->
-                   case mseed of
-                     Nothing ->
-                       ["--dev-hsm-seed=" ++ B8.unpack seed]
+                 DeterministicHSM mseed1 ->
+                   case mseed1 <|> dirseed of
+                     Nothing -> fail "no seed available for DeterministicHSM"
                      Just Seed{..} ->
-                       ["--dev-hsm-seed=" ++ (hsmseed ^.. from packedBytes
-                                                       . traverse
-                                                       . re hex
-                                                       & concat)]
+                       ["--dev-hsm-seed=" ++ B8.unpack hsmseed]
 
   return $ LightningD {
                 lightningDir    = ld
@@ -96,13 +97,6 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
               , lightningArgs   = cmdline
               , lightningRPC    = rpc
               }
-
-        -- if DEVELOPER:
-        --     self.cmd_line += ['--dev-broadcast-interval=1000']
-        --     if not random_hsm:
-        --         self.cmd_line += ['--dev-hsm-seed={}'.format(seed.hex())]
-        -- self.cmd_line += ["--{}={}".format(k, v) for k, v in sorted(LIGHTNINGD_CONFIG.items())]
-        -- self.prefix = 'lightningd(%d)' % (port)
 
         -- if not os.path.exists(lightning_dir):
         --     os.makedirs(lightning_dir)
