@@ -4,12 +4,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 import Control.Lens
-import Numeric.Lens (hex)
-import Data.ByteString.Lens (IsByteString(packedBytes))
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.ByteString (ByteString)
+import Data.ByteString.Lens (IsByteString(packedBytes))
 import Data.Word (Word16, Word8)
 import Network.HTTP.Client (newManager, defaultManagerSettings)
+import Numeric.Lens (hex)
+import System.FilePath ((</>))
 import Text.Regex.TDFA
 import Text.Regex.TDFA.ByteString (regexec)
 
@@ -72,17 +73,20 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
             , rpcTimeout = Just (10 * 1000000)
             }
 
-  seed <- maybe (fail "initLightning: could not determine seed from lightningDir")
-                return (mseed ^? ix 0 . ix 1)
+  seed <- mseed ^? ix 0 . ix 1
 
   let cmds = cmdline ++
                case hsm of
                  RandomHSM -> []
-                 DeterministicHSM Nothing -> []
-                 DeterministicHSM (Just Seed{..}) ->
-                   ["--dev-hsm-seed=" ++ concat (hsmseed ^.. from packedBytes
-                                                           . traverse
-                                                           . re hex)]
+                 DeterministicHSM mseed ->
+                   case mseed of
+                     Nothing ->
+                       ["--dev-hsm-seed=" ++ B8.unpack seed]
+                     Just Seed{..} ->
+                       ["--dev-hsm-seed=" ++ (hsmseed ^.. from packedBytes
+                                                       . traverse
+                                                       . re hex
+                                                       & concat)]
 
   return $ LightningD {
                 lightningDir    = ld
