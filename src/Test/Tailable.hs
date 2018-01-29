@@ -11,10 +11,10 @@ module Test.Tailable where
 import Control.Monad (unless, foldM_)
 import Data.Maybe (fromMaybe)
 import Control.Exception (SomeException, try, throwIO)
-import Control.Monad (when)
+import Control.Monad (when, (<=<))
 import Control.Monad.Catch (MonadCatch(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State.Strict (StateT(..), MonadState(..))
+import Control.Monad.State.Strict (StateT(..), MonadState(..), evalStateT)
 import Data.ByteString (hGetLine, ByteString)
 import System.IO hiding (hGetLine)
 import Text.Regex.Base.RegexLike (matchTest, makeRegex)
@@ -58,6 +58,13 @@ instance ToTDFA ByteString where
 
 runTailable :: Tailable -> TailableM m a -> m (a, Tailable)
 runTailable t = flip runStateT t . runTailable_
+
+evalTailable :: Monad m => Tailable -> TailableM m (TailResult a) -> m a
+evalTailable t = tailResultThrow . flip evalStateT t . runTailable_
+  where
+    tailResultThrow m = do
+      eres <- m
+      either (fail . show) return eres
 
 defaultTailable :: Handle -> Tailable
 defaultTailable h =

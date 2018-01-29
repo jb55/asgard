@@ -12,11 +12,13 @@ import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
 
 import Data.Aeson
+import Data.Either (isLeft)
 import Data.ByteString.Char8 (hPutStrLn)
 import Data.ByteString (ByteString)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Word (Word16)
+import Control.Monad (when)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), openFile, hClose, Handle)
 import System.Posix.Signals (signalProcess)
@@ -116,8 +118,8 @@ startBitcoin Bitcoin{..} = do
 
   $(logInfo) ("Starting " <> T.pack (show btcproc))
 
-  let tail_ = defaultTailable stdout
-  runTailable tail_ (waitForLogs [ bs "Done loading" ])
+  let t = defaultTailable stdout
+  evalTailable t (waitForLogs [ bs "Done loading" ])
 
   return btcproc
 
