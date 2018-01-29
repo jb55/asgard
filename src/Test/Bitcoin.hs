@@ -10,7 +10,7 @@ module Test.Bitcoin  where
 import Text.Printf (printf)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
-import Control.Concurrent (threadDelay)
+
 import Data.Aeson
 import Data.ByteString.Char8 (hPutStrLn)
 import Data.ByteString (ByteString)
@@ -116,9 +116,8 @@ startBitcoin Bitcoin{..} = do
 
   $(logInfo) ("Starting " <> T.pack (show btcproc))
 
-  let tail = defaultTailable stdout
-  res <- runTailable tail (waitForLogs [ bs "Done loading" ])
-  $(logDebug) ("Tailed log result " <> T.pack (show res))
+  let tail_ = defaultTailable stdout
+  runTailable tail_ (waitForLogs [ bs "Done loading" ])
 
   return btcproc
 

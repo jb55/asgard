@@ -10,7 +10,7 @@ module Test.Tailable where
 
 import Control.Monad (unless, foldM_)
 import Data.Maybe (fromMaybe)
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, try, throwIO)
 import Control.Monad (when)
 import Control.Monad.Catch (MonadCatch(..))
 import Control.Monad.IO.Class (MonadIO(..))
@@ -24,6 +24,7 @@ import UnliftIO (MonadUnliftIO(..))
 
 import qualified UnliftIO.Exception as UIO
 import qualified UnliftIO.Timeout as UIO
+import qualified System.Timeout as Sys
 import qualified Data.ByteString.Char8 as B8
 
 data Tailable =
@@ -87,7 +88,7 @@ waitForLogs rs = do
   isSeekable <- liftIO $ hIsSeekable tailHandle
   when isSeekable $
     liftIO $ hSeek tailHandle AbsoluteSeek tailLastPos
-  res <- liftIO $ timeout tailTimeout $ wait tailHandle
+  res <- liftIO $ timeout tailTimeout  $ wait tailHandle
   when isSeekable $ do
     pos <- liftIO $ hTell tailHandle
     put (t { tailLastPos = pos })
@@ -96,15 +97,14 @@ waitForLogs rs = do
     regexes = map toTDFA rs
     wait h = catching noMatchError (waitForLogsH h regexes)
 
-test :: IO (TailResult (), Tailable)
+test :: IO ()
 test = do
   writeFile "/tmp/haskelltest" "HI\nderp OPENINGD hey\nCHANNELD_NORMAL"
   h <- openFile "/tmp/haskelltest" ReadMode
   let tailable = defaultTailable h
       rs       = map toTDFA [".*OPENINGD.*", ".*CHANNELD_NORMAL.*" :: ByteString]
-  res <- runTailable tailable (waitForLogs rs)
+  runTailable tailable (waitForLogs rs)
   hClose h
-  return res
 
 
 timeout :: MonadUnliftIO m => Int -> m (TailResult a) -> m (TailResult a)
