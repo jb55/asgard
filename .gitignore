@@ -5,3 +5,4 @@
 *.o
 /TAGS
 /tags
+/dist
