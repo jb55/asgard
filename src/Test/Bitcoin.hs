@@ -34,6 +34,8 @@ import Test.JsonRPC
 import Test.Proc
 import Test.Tailable hiding (timeout)
 
+newtype BitcoinProc = BitcoinProc { getBitcoinProc :: Proc }
+    deriving Show
 
 data BitcoinD =
   BitcoinD {
@@ -75,7 +77,7 @@ initBitcoin dir port = liftIO $ do
          }
 
 
-startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => BitcoinD -> m Proc
+startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => BitcoinD -> m BitcoinProc
 startBitcoin BitcoinD{..} = do
   let p = (P.proc "bitcoind" bitcoinArgs) { std_out = CreatePipe
                                           , close_fds = False
@@ -95,13 +97,13 @@ startBitcoin BitcoinD{..} = do
 
   $(logInfo) ("Starting " <> T.pack (show btcproc))
 
-  return btcproc
+  return (BitcoinProc btcproc)
 
 bs :: ByteString -> ByteString
 bs s = s
 
-stopBitcoin :: MonadLoggerIO m => Proc -> m ()
-stopBitcoin b@Proc{..} = do
+stopBitcoin :: MonadLoggerIO m => BitcoinProc -> m ()
+stopBitcoin (BitcoinProc b@Proc{..}) = do
   $(logInfo) ("Terminating " <> T.pack (show b))
   liftIO $ terminateProcess procHandle
   ma <- liftIO $ timeout (30 * 1000000) (waitForProcess procHandle)
@@ -137,7 +139,7 @@ writeConfig file port = do
   hClose handle
 
 withBitcoin :: (MonadUnliftIO m, MonadLoggerIO m)
-            => ((BitcoinD, Proc) -> m c) -> m c
+            => ((BitcoinD, BitcoinProc) -> m c) -> m c
 withBitcoin cb = UIO.bracket start stop cb
   where
     start = do
@@ -146,8 +148,8 @@ withBitcoin cb = UIO.bracket start stop cb
       return (btc, bproc)
     stop (_, bproc) = stopBitcoin bproc
 
-waitForLoaded :: MonadIO m => Proc -> m ()
-waitForLoaded Proc{..} =
+waitForLoaded :: MonadIO m => BitcoinProc -> m ()
+waitForLoaded (BitcoinProc Proc{..}) =
   evalTailable t (waitForLogs [ bs "Done loading" ])
   where
     t = defaultTailable procStdout
