@@ -1,5 +1,5 @@
 
-rustydiced: Main.hs
+asgard: Main.hs
 	ghc -O -isrc -o $@ $<
 
 tags: TAGS
