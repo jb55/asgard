@@ -7,18 +7,17 @@
 
 module Test.Bitcoin  where
 
-import Text.Printf (printf)
+
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
-
 import Data.Aeson
-import Data.Either (isLeft)
-import Data.ByteString.Char8 (hPutStrLn)
 import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (hPutStrLn)
+
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Word (Word16)
-import Control.Monad (when)
+import Network.HTTP.Client (newManager, defaultManagerSettings)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), openFile, hClose, Handle)
 import System.Posix.Signals (signalProcess)
@@ -26,8 +25,8 @@ import System.Posix.Types (CPid)
 import System.Process
 import System.Process.Internals
 import System.Timeout (timeout)
+import Text.Printf (printf)
 import UnliftIO (MonadUnliftIO)
-import Network.HTTP.Client (newManager, defaultManagerSettings)
 
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
@@ -98,7 +97,7 @@ initBitcoin dir port = liftIO $ do
          })
 
 
-startBitcoin :: (MonadLoggerIO m) => Bitcoin -> m BitcoinProc
+startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => Bitcoin -> m BitcoinProc
 startBitcoin Bitcoin{..} = do
   let p = (P.proc "bitcoind" bitcoinArgs) { std_out = CreatePipe
                                           , close_fds = False
@@ -117,9 +116,6 @@ startBitcoin Bitcoin{..} = do
     }
 
   $(logInfo) ("Starting " <> T.pack (show btcproc))
-
-  let t = defaultTailable stdout
-  evalTailable t (waitForLogs [ bs "Done loading" ])
 
   return btcproc
 
@@ -172,9 +168,15 @@ withBitcoin cb = UIO.bracket start stop cb
       return (btc, bproc)
     stop (_, bproc) = stopBitcoin bproc
 
+waitForLoaded :: MonadIO m => BitcoinProc -> m ()
+waitForLoaded BitcoinProc{..} =
+  evalTailable t (waitForLogs [ bs "Done loading" ])
+  where
+    t = defaultTailable bitcoinStdout
 
 testbtc :: IO ()
-testbtc = runStderrLoggingT $ withBitcoin $ \(btc,_) -> do
+testbtc = runStderrLoggingT $ withBitcoin $ \(btc,btcproc) -> do
   let rpc = bitcoinRPC btc
+  waitForLoaded btcproc
   addr <- liftIO (generateBlocks rpc 5)
   liftIO (print addr)

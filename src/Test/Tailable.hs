@@ -8,14 +8,13 @@
 
 module Test.Tailable where
 
+import Control.Exception (SomeException)
 import Control.Monad (unless, foldM_)
-import Data.Maybe (fromMaybe)
-import Control.Exception (SomeException, try, throwIO)
-import Control.Monad (when, (<=<))
-import Control.Monad.Catch (MonadCatch(..))
+import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (StateT(..), MonadState(..), evalStateT)
 import Data.ByteString (hGetLine, ByteString)
+import Data.Maybe (fromMaybe)
 import System.IO hiding (hGetLine)
 import Text.Regex.Base.RegexLike (matchTest, makeRegex)
 import Text.Regex.TDFA.ByteString (Regex)
@@ -24,7 +23,7 @@ import UnliftIO (MonadUnliftIO(..))
 
 import qualified UnliftIO.Exception as UIO
 import qualified UnliftIO.Timeout as UIO
-import qualified System.Timeout as Sys
+
 import qualified Data.ByteString.Char8 as B8
 
 data Tailable =
