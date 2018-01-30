@@ -8,7 +8,6 @@ module Network.RPC.CLightning.Peer
     ( Peer(..)
     , PeerChan(..)
     , ListPeersResp(..)
-    , ListPeers(..)
     , ShortId(..)
     ) where
 
@@ -16,7 +15,7 @@ import Data.Aeson
 import Bitcoin.Denomination (MSats)
 import Network.RPC.PeerState (PeerState)
 import Network.RPC.Common
-import Network.RPC.CLightning.Request (makeRequest)
+import Network.RPC.JsonRPC (noArgs)
 import Data.Text (Text)
 
 data PeerChan = PeerChan {
@@ -59,15 +58,8 @@ instance FromJSON PeerChan where
 newtype ListPeersResp = ListPeersResp { getPeersResp :: [Peer] }
   deriving Show
 
-data ListPeers = ListPeers
-  deriving Show
-
-instance ToJSON ListPeers where
-  toJSON _ = makeRequest "listpeers"
-
 instance FromJSON ListPeersResp where
   parseJSON (Object obj) =
     ListPeersResp <$> obj .: "peers"
   parseJSON _ = fail "ListPeersResp is not an object"
 
-type instance Resp ListPeers = ListPeersResp

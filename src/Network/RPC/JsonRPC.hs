@@ -55,24 +55,21 @@ instance FromJSON a => FromJSON (JsonRPCRes a) where
           <*> obj .:  "id"
     parseJSON _ = fail "JsonRPCRes is not an object"
 
-reqObj :: (ToJSON params) => Text -> params -> Value
-reqObj method params =
+makeRequest :: ToJSON params => Text -> params -> Value
+makeRequest method params =
   object [ "jsonrpc" .= T.pack "2.0"
          , "method"  .= method
          , "params"  .= params
          , "id"      .= (1 :: Word8)
          ]
 
+noArgs :: Text -> Value
+noArgs p = makeRequest p (mempty :: Array)
 
 call :: (MonadIO m, ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> m b
 call JsonRPC{..} method params =
     let
-        reqData =
-            object [ "jsonrpc" .= T.pack "2.0"
-                   , "method"  .= method
-                   , "params"  .= params
-                   , "id"      .= (1 :: Word8)
-                  ]
+        reqData = makeRequest method params
         req =
             jrpcReq {
               requestBody = RequestBodyLBS (JSON.encode reqData)

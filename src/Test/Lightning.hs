@@ -4,18 +4,20 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 import Control.Applicative ((<|>))
+import Control.Concurrent (threadDelay)
 import Control.Lens
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
 import Data.ByteString (ByteString)
 import Data.Word (Word16)
-import Network.RPC (rpcRequest, ListPeers(..))
+import Network.RPC (rpc, rpc_)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import Text.Regex.TDFA
 import UnliftIO (MonadUnliftIO)
 
 import Network.RPC.Config
+import Network.RPC.CLightning (listPeers)
 import Regex.ToTDFA
 import Test.Proc
 import Test.Tailable
@@ -136,8 +138,10 @@ testln :: IO ()
 testln = runStderrLoggingT $
   withBitcoin $ \(_, btcproc) -> do
     btcproc' <- BTC.waitForLoaded btcproc
-    withLightning btcproc' $ \(ln,lnproc) -> do
-      let rpc = lightningRPC ln
+    withLightning btcproc' $ \(LightningD{..},lnproc@LightningProc{..}) -> do
+      let rpc = lightningRPC
       _    <- waitForLoaded lnproc
-      resp <- rpcRequest rpc ListPeers
+      resp <- listPeers rpc
+      -- crashRestartProc lightningArgs lightningproc
+      -- liftIO (threadDelay (10 * 1000000))
       liftIO (print resp)

@@ -25,7 +25,7 @@ import qualified Data.ByteString.Char8 as B8
 import qualified UnliftIO.Exception as UIO
 
 import Regex.ToTDFA
-import Test.JsonRPC
+import Network.RPC.JsonRPC
 import Test.Proc
 import Test.Tailable hiding (timeout)
 
@@ -72,10 +72,12 @@ initBitcoin dir port = liftIO $ do
          }
 
 
-startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m)
-             => BitcoinD -> m (BitcoinProc Loading Started)
+startBitcoin :: MonadLoggerIO m => BitcoinD -> m (BitcoinProc Loading Started)
 startBitcoin BitcoinD{..} = fmap BitcoinProc (startProc "bitcoind" bitcoinArgs)
 
+sendtoaddress :: MonadIO m => JsonRPC -> Text -> Int -> m Text
+sendtoaddress rpc addr sats =
+  call rpc "sendtoaddress" [toJSON addr, toJSON sats]
 
 getnewaddress :: MonadIO m => JsonRPC -> m Text
 getnewaddress rpc = call rpc "getnewaddress" (mempty :: Array)

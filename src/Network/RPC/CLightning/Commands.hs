@@ -6,7 +6,6 @@
 
 module Network.RPC.CLightning.Commands
     ( CRPCResp(..)
-    , ListPeers(..)
     , ListPeersResp(..)
     , ListChannels(..)
     , ListChannelsResp(..)

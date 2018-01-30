@@ -67,8 +67,16 @@ stopProc proc@Proc{..} = do
       logInfoN "Process timed out while try to close. Killing."
       liftIO (signalProcess 9 procPID)
 
-startProc :: (MonadUnliftIO m, MonadLoggerIO m)
-          => String -> [String] -> m (Proc Started)
+
+crashRestartProc :: MonadLoggerIO m => [String] -> Proc Started -> m (Proc Started)
+crashRestartProc args p@Proc{..} = do
+  logInfoN ("Crashing " <> T.pack (show p))
+  liftIO (signalProcess 9 procPID)
+  liftIO (waitForProcess procHandle)
+  startProc procName args
+
+
+startProc :: MonadLoggerIO m => String -> [String] -> m (Proc Started)
 startProc procname args = do
   let p = (P.proc procname args)
             { std_out = CreatePipe

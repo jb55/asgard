@@ -12,7 +12,7 @@ module Network.RPC.CLightning.Channel
 import Data.Aeson
 import Data.Text (Text)
 import Network.RPC.Common (Resp)
-import Network.RPC.CLightning.Request (makeRequest)
+import Network.RPC.JsonRPC (noArgs)
 
 data Channel = Channel {
     channelSource              :: Text
@@ -53,4 +53,4 @@ data ListChannels = ListChannels
 type instance Resp ListChannels = ListChannelsResp
 
 instance ToJSON ListChannels where
-  toJSON _ = makeRequest "getchannels"
+  toJSON _ = noArgs "getchannels"
