@@ -16,12 +16,12 @@ import System.FilePath ((</>))
 import Text.Regex.TDFA
 import UnliftIO (MonadUnliftIO)
 
+import Network.RPC.CLightning
 import Network.RPC.Config
-import Network.RPC.CLightning (listPeers)
 import Regex.ToTDFA
+import Test.Bitcoin (BitcoinProc(..), withBitcoin)
 import Test.Proc
 import Test.Tailable
-import Test.Bitcoin (BitcoinProc(..), withBitcoin)
 
 import qualified Test.Bitcoin as BTC
 import qualified Data.ByteString.Char8 as B8
@@ -141,7 +141,8 @@ testln = runStderrLoggingT $
     withLightning btcproc' $ \(LightningD{..},lnproc@LightningProc{..}) -> do
       let rpc = lightningRPC
       _    <- waitForLoaded lnproc
-      resp <- listPeers rpc
+      peers <- listPeers rpc
+      addr <- newAddr rpc "bech32"
       -- crashRestartProc lightningArgs lightningproc
       -- liftIO (threadDelay (10 * 1000000))
-      liftIO (print resp)
+      liftIO (print (peers, addr))
