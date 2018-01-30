@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Test.JsonRPC where
+module Network.RPC.JsonRPC where
 
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -54,6 +54,15 @@ instance FromJSON a => FromJSON (JsonRPCRes a) where
           <*> obj .:? "error"
           <*> obj .:  "id"
     parseJSON _ = fail "JsonRPCRes is not an object"
+
+reqObj :: (ToJSON params) => Text -> params -> Value
+reqObj method params =
+  object [ "jsonrpc" .= T.pack "2.0"
+         , "method"  .= method
+         , "params"  .= params
+         , "id"      .= (1 :: Word8)
+         ]
+
 
 call :: (MonadIO m, ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> m b
 call JsonRPC{..} method params =
