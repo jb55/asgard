@@ -103,9 +103,8 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
 
 startLightning :: (MonadUnliftIO m, MonadLoggerIO m)
                => LightningD
-               -> BitcoinProc Loaded Started
                -> m (LightningProc Loading Started)
-startLightning LightningD{..} BitcoinProc{..} =
+startLightning LightningD{..} =
   fmap LightningProc (startProc "lightningd" lightningArgs)
 
 
@@ -121,13 +120,13 @@ waitForLoaded lp@(LightningProc p@Proc{..}) = do
 withLightning :: (MonadUnliftIO m, MonadLoggerIO m)
               => BitcoinProc Loaded Started
               -> ((LightningD, LightningProc Loading Started) -> m c) -> m c
-withLightning btcproc cb = UIO.bracket start stop cb
+withLightning _ cb = UIO.bracket start stop cb
   where
     lightningDir = LightningDir "/tmp/lightningtest"
     bitcoinDir   = BitcoinDir "/tmp/bitcointest"
     start = do
       ln     <- initLightning RandomHSM bitcoinDir lightningDir 9785
-      lnproc <- startLightning ln btcproc
+      lnproc <- startLightning ln
       return (ln, lnproc)
     stop (_, LightningProc p) = stopProc p
 
