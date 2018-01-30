@@ -8,6 +8,7 @@ module Network.RPC
     ) where
 
 import Data.Aeson
+import Control.Monad.IO.Class (MonadIO)
 import Data.ByteString.Lazy (toStrict)
 import Data.Bifunctor (bimap)
 
@@ -21,8 +22,8 @@ import Network.RPC.Internal (sockRequest)
 import qualified Data.ByteString.Char8 as B8
 
 rpcRequest
-  :: (ToJSON a, FromJSON (Resp a)) =>
-     SocketConfig -> a -> IO (Either RPCError (Resp a))
+  :: (MonadIO m, ToJSON a, FromJSON (Resp a)) =>
+     SocketConfig -> a -> m (Either RPCError (Resp a))
 rpcRequest cfg json_ = do
   mres <- sockRequest cfg (toStrict (encode json_))
   case mres of

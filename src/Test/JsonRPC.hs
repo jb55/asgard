@@ -5,6 +5,7 @@ module Test.JsonRPC where
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Monoid ((<>))
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Text (Text)
 import Data.Word (Word16, Word8)
 import Network.HTTP.Client
@@ -54,7 +55,7 @@ instance FromJSON a => FromJSON (JsonRPCRes a) where
           <*> obj .:  "id"
     parseJSON _ = fail "JsonRPCRes is not an object"
 
-call :: (ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> IO b
+call :: (MonadIO m, ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> m b
 call JsonRPC{..} method params =
     let
         reqData =
@@ -69,7 +70,7 @@ call JsonRPC{..} method params =
             }
     in
       do
-        res <- httpLbs req jrpcManager
+        res <- liftIO (httpLbs req jrpcManager)
         let body = responseBody res
         case JSON.eitherDecode body of
           Left e -> fail ("Could not decode JSON: \n\n" <> e <> "\n\n" <> show body )

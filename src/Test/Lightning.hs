@@ -131,6 +131,7 @@ withLightning _ cb = UIO.bracket start stop cb
       return (ln, lnproc)
     stop (_, LightningProc p) = stopProc p
 
+
 testln :: IO ()
 testln = runStderrLoggingT $
   withBitcoin $ \(_, btcproc) -> do
@@ -138,5 +139,5 @@ testln = runStderrLoggingT $
     withLightning btcproc' $ \(ln,lnproc) -> do
       let rpc = lightningRPC ln
       _ <- waitForLoaded lnproc
-      resp <- liftIO (rpcRequest rpc ListPeers)
+      resp <- rpcRequest rpc ListPeers
       liftIO (print resp)

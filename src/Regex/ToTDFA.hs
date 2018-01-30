@@ -16,3 +16,6 @@ instance ToTDFA Regex where
 
 instance ToTDFA ByteString where
     toTDFA bs = makeRegex bs
+
+bsreg :: ByteString -> Regex
+bsreg = makeRegex

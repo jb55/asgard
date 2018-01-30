@@ -132,9 +132,11 @@ timeoutError = tailErr Timeout Nothing
 noMatchError :: ByteString -> TailError
 noMatchError = tailErrStr MatchError
 
-
-waitForLog :: MonadIO m => Handle -> ByteString -> m ()
-waitForLog handle bs =
-  evalTailable t (waitForLogsM [ bs ])
+waitForLogs :: MonadIO m => Handle -> [ByteString] -> m ()
+waitForLogs handle bs =
+  evalTailable t (waitForLogsM bs)
   where
     t = defaultTailable handle
+
+waitForLog :: MonadIO m => Handle -> ByteString -> m ()
+waitForLog handle bs = waitForLogs handle [bs]

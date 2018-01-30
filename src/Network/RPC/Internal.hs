@@ -8,6 +8,7 @@ module Network.RPC.Internal
     ) where
 
 import Data.ByteString
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Maybe (fromMaybe)
 import Network.RPC.Common (defaultTimeout)
 import Network.RPC.Config (SocketConfig(..))
@@ -20,8 +21,8 @@ import qualified Data.ByteString as BS
 import qualified Data.DList as DL
 import qualified Data.ByteString.Lazy as Lazy
 
-sockRequest :: SocketConfig -> ByteString -> IO (Either RPCError Lazy.ByteString)
-sockRequest SocketConfig{..} bs = timeout tout $ do
+sockRequest :: MonadIO m => SocketConfig -> ByteString -> m (Either RPCError Lazy.ByteString)
+sockRequest SocketConfig{..} bs = liftIO $ timeout tout $ do
   soc <- socket AF_UNIX Stream 0
   catching connectionError (connect soc (SockAddrUnix rpcPath))
   catching writeError (sendAll soc bs)

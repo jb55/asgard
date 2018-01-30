@@ -1,7 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
-
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -10,20 +8,23 @@ module Test.Bitcoin where
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
+import Control.Monad (replicateM_, void)
+import Control.Concurrent (threadDelay, forkIO)
 import Data.Aeson
 import Data.ByteString.Char8 (hPutStrLn)
-
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Word (Word16)
 import Network.HTTP.Client (newManager, defaultManagerSettings)
 import System.FilePath ((</>))
-import System.IO (IOMode(WriteMode), openFile, hClose)
+import System.IO (IOMode(WriteMode), openFile, hClose, hGetLine)
 import UnliftIO (MonadUnliftIO)
+import UnliftIO.Async (async, wait)
 
 import qualified Data.ByteString.Char8 as B8
 import qualified UnliftIO.Exception as UIO
 
+import Regex.ToTDFA
 import Test.JsonRPC
 import Test.Proc
 import Test.Tailable hiding (timeout)
@@ -76,14 +77,14 @@ startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m)
 startBitcoin BitcoinD{..} = fmap BitcoinProc (startProc "bitcoind" bitcoinArgs)
 
 
-getnewaddress :: JsonRPC -> IO Text
+getnewaddress :: MonadIO m => JsonRPC -> m Text
 getnewaddress rpc = call rpc "getnewaddress" (mempty :: Array)
 
-generatetoaddress :: JsonRPC -> Int -> Text -> IO [Text]
+generatetoaddress :: MonadIO m => JsonRPC -> Int -> Text -> m [Text]
 generatetoaddress rpc nblocks addr =
   call rpc "generatetoaddress" [toJSON nblocks, toJSON addr]
 
-generateBlocks :: JsonRPC -> Int -> IO [Text]
+generateBlocks :: MonadIO m => JsonRPC -> Int -> m [Text]
 generateBlocks rpc nblocks = do
   addr <- getnewaddress rpc
   generatetoaddress rpc nblocks addr
@@ -114,8 +115,11 @@ waitForLoaded btcproc@(BitcoinProc p@Proc{..}) = do
   return btcproc{ bitcoinproc = p }
 
 testbtc :: IO ()
-testbtc = runStderrLoggingT $ withBitcoin $ \(btc, BitcoinProc proc_) -> do
-  let rpc = bitcoinRPC btc
-  waitForLog (procStdout proc_) "Done loading"
-  addr <- liftIO (generateBlocks rpc 5)
+testbtc = liftIO $ runStderrLoggingT $ withBitcoin $ \(btc, BitcoinProc proc_) -> do
+  let rpc    = bitcoinRPC btc
+      stdout = procStdout proc_
+  waitForLog stdout "Done loading"
+  getAddr <- async (generateBlocks rpc 5)
+  waitForLogs stdout (replicate 5 (bstr "AddToWallet"))
+  addr <- wait getAddr
   liftIO (print addr)
