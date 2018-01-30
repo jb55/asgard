@@ -19,15 +19,10 @@ import Data.Word (Word16)
 import Network.HTTP.Client (newManager, defaultManagerSettings)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), openFile, hClose)
-import System.Process
 import UnliftIO (MonadUnliftIO)
 
 import qualified Data.ByteString.Char8 as B8
-import qualified Data.Text as T
-import qualified System.Process as P
 import qualified UnliftIO.Exception as UIO
-
-import Regex.ToTDFA
 
 import Test.JsonRPC
 import Test.Proc
@@ -77,26 +72,8 @@ initBitcoin dir port = liftIO $ do
 
 
 startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => BitcoinD -> m BitcoinProc
-startBitcoin BitcoinD{..} = do
-  let p = (P.proc "bitcoind" bitcoinArgs) { std_out = CreatePipe
-                                          , close_fds = False
-                                          }
+startBitcoin BitcoinD{..} = fmap BitcoinProc (startProc "bitcoind" bitcoinArgs)
 
-  (_, mstdout, _, pHandle) <- liftIO $ createProcess_ "bitcoind" p
-  mpid <- liftIO $ getPid pHandle
-
-  stdout <- maybe (fail "Could not open bitcoind stdout") return mstdout
-  pid    <- maybe (fail "Could not grab bitcoind pid") return mpid
-
-  let btcproc = Proc {
-      procStdout = stdout
-    , procHandle = pHandle
-    , procPID    = fromIntegral pid
-    }
-
-  $(logInfo) ("Starting " <> T.pack (show btcproc))
-
-  return (BitcoinProc btcproc)
 
 getnewaddress :: JsonRPC -> IO Text
 getnewaddress rpc = call rpc "getnewaddress" (mempty :: Array)
@@ -134,8 +111,8 @@ waitForLoaded (BitcoinProc Proc{..}) =
   waitForLog procStdout "Done loading"
 
 testbtc :: IO ()
-testbtc = runStderrLoggingT $ withBitcoin $ \(btc,btcproc) -> do
+testbtc = runStderrLoggingT $ withBitcoin $ \(btc, BitcoinProc proc_) -> do
   let rpc = bitcoinRPC btc
-  waitForLog (bitcoinStdout btcproc) "Done loading"
+  waitForLog (procStdout proc_) "Done loading"
   addr <- liftIO (generateBlocks rpc 5)
   liftIO (print addr)

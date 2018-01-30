@@ -8,23 +8,19 @@ import Control.Lens
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
 import Data.ByteString (ByteString)
-import Data.Monoid ((<>))
 import Data.Word (Word16)
 import Network.RPC (rpcRequest, ListPeers(..))
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
-import System.Process
 import Text.Regex.TDFA
 import UnliftIO (MonadUnliftIO)
 
-import Regex.ToTDFA
 import Network.RPC.Config
-
-import Test.Tailable
+import Regex.ToTDFA
 import Test.Proc
+import Test.Tailable
 
-import qualified System.Process as P
-import qualified Data.Text as T
+
 import qualified Data.ByteString.Char8 as B8
 import qualified UnliftIO as UIO
 
@@ -65,7 +61,7 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
         , "--lightning-dir=" ++ lightningdir
         , "--port=" ++ show port
         , "--allow-deprecated-apis=false"
-        , "--bitcoind-poll=1s"
+        , "--lightningd-poll=1s"
         , "--cltv-delta=6"
         , "--cltv-final=5"
         -- NOTE: this should only be set when DEVELOPER=1
@@ -104,32 +100,19 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
            , lightningRPC    = rpc
            }
 
+
 startLightning :: (MonadUnliftIO m, MonadLoggerIO m) => LightningD -> m LightningProc
-startLightning LightningD{..} = do
-  let p = (P.proc "lightningd" lightningArgs)
-            { std_out = CreatePipe
-            , close_fds = False
-            }
+startLightning LightningD{..} =
+  fmap LightningProc (startProc "lightningd" lightningArgs)
 
-  (_, mstdout, _, pHandle) <- liftIO $ createProcess_ "lightningd/lightningd" p
-  mpid <- liftIO $ getPid pHandle
 
-  stdout <- maybe (fail "Could not open bitcoind stdout") return mstdout
-  pid    <- maybe (fail "Could not grab bitcoind pid") return mpid
 
-  let lnproc = Proc {
-      procStdout = stdout
-    , procHandle = pHandle
-    , procPID    = fromIntegral pid
-    }
-
-  logInfoN ("Starting " <> T.pack (show lnproc))
-
-  return (LightningProc lnproc)
 
 waitForLoaded :: MonadIO m => LightningProc -> m ()
 waitForLoaded (LightningProc Proc{..}) =
   waitForLog procStdout "Hello world from"
+
+
 
 withLightning :: (MonadUnliftIO m, MonadLoggerIO m)
               => ((LightningD, LightningProc) -> m c) -> m c
