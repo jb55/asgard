@@ -5,6 +5,7 @@ module Network.RPC.JsonRPC where
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Monoid ((<>))
+import Control.Monad.Logger
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Text (Text)
 import Data.Word (Word16, Word8)
@@ -66,7 +67,7 @@ makeRequest method params =
 noArgs :: Text -> Value
 noArgs p = makeRequest p (mempty :: Array)
 
-call :: (MonadIO m, ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> m b
+call :: (MonadLoggerIO m, ToJSON a, FromJSON b) => JsonRPC -> Text -> a -> m b
 call JsonRPC{..} method params =
     let
         reqData = makeRequest method params
@@ -76,11 +77,14 @@ call JsonRPC{..} method params =
             }
     in
       do
+        logDebugN ("calling rpc " <> method)
         res <- liftIO (httpLbs req jrpcManager)
+        logDebugN ("finished rpc " <> method)
         let body = responseBody res
         case JSON.eitherDecode body of
           Left e -> fail ("Could not decode JSON: \n\n" <> e <> "\n\n" <> show body )
-          Right jrpcres  -> return (jrpcResult jrpcres)
+          Right jrpcres  -> do
+            return (jrpcResult jrpcres)
 
-call_ :: (MonadIO m, FromJSON b) => JsonRPC -> Text -> m b
+call_ :: (MonadLoggerIO m, FromJSON b) => JsonRPC -> Text -> m b
 call_ rpc method = call rpc method (mempty :: Array)

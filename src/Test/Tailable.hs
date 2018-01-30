@@ -62,7 +62,7 @@ defaultTailable h =
   Tailable {
     tailHandle = h
   , tailLastPos = 0
-  , tailTimeout = 10000000
+  , tailTimeout = 10 * 1000000
   }
 
 untilM_ :: (Monad m) => m Bool -> m ()

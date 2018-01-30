@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -8,7 +9,7 @@ import Control.Exception (try, SomeException)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, wait)
 import Control.Lens
-import Control.Monad (replicateM_, void)
+import Control.Monad (replicateM_, void, forever)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
 import Data.ByteString (ByteString)
@@ -19,6 +20,7 @@ import System.FilePath ((</>))
 import System.IO (hGetLine)
 import Text.Regex.TDFA
 import UnliftIO (MonadUnliftIO)
+import Data.Text (Text)
 
 import Network.RPC.CLightning
 import Network.RPC.Config
@@ -28,6 +30,7 @@ import Test.Proc
 import Test.Tailable
 
 import qualified Test.Bitcoin as BTC
+import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as B8
 import qualified UnliftIO as UIO
 
@@ -143,22 +146,22 @@ rmrf p = void (try (removePathForcibly p) :: IO (Either SomeException ()))
 testln :: IO ()
 testln = do
   rmrf "/tmp/lightningtest"
-  threadDelay 1000
+  rmrf "/tmp/bitcointest"
 
   runStderrLoggingT $
     withBitcoin $ \(BitcoinD{..}, btcproc@(BitcoinProc bproc)) -> do
+      let btcrpc    = bitcoinRPC
+          btcstdout = procStdout bproc
       btcproc' <- BTC.waitForLoaded btcproc
-      BTC.setupBitcoin bitcoinRPC
+      res :: Either SomeException [Text] <- UIO.try (BTC.setupBitcoin bitcoinRPC)
+      either (const $ logErrorN "setupBitcoinTimeout" >> fail "blah") return res
       withLightning btcproc' $ \(LightningD{..},lnproc@LightningProc{..}) -> do
         let rpc       = lightningRPC
-            btcrpc    = bitcoinRPC
-            btcstdout = procStdout bproc
             lnstdout  = procStdout lightningproc
         _    <- waitForLoaded lnproc
         peers <- listPeers rpc
         addr <- newAddr rpc "bech32"
-        BTC.sendtoaddress btcrpc addr 1
-        moreblocks <- liftIO $ async (BTC.generateBlocks btcrpc 1)
+        moreblocks <- UIO.async (BTC.generateBlocks btcrpc addr 1)
         waitForLog lnstdout "Owning output"
         liftIO (wait moreblocks)
         funds <- listFunds rpc

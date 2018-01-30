@@ -17,6 +17,7 @@ import System.Timeout (timeout)
 import Text.Printf (printf)
 
 import qualified Data.Text as T
+import qualified UnliftIO as UIO
 import qualified System.Process as P
 
 data Started
@@ -55,13 +56,16 @@ getPid ph = withProcessHandle ph go
 stopProc :: MonadLoggerIO m => Proc Started -> m (Proc Stopped)
 stopProc proc@Proc{..} = do
   logInfoN ("Terminating " <> T.pack (show proc))
-  liftIO $ terminateProcess procHandle
-  ma <- liftIO $ timeout (30 * 1000000) (waitForProcess procHandle)
+  ma <- liftIO $ timeout 100000 (terminateProcess procHandle)
   maybe timedOut (return . const ()) ma
+  ma <- liftIO $ timeout 100000 (waitForProcess procHandle)
+  maybe timedOut (return . const ()) ma
+  logInfoN ("Terminated " <> T.pack (show proc))
   liftIO $ hClose procStdout
   -- coerce return type
   return proc{ procName = procName }
   where
+    timeoutLen = 10 * 1000000
     timedOut :: MonadLoggerIO m => m ()
     timedOut = do
       logInfoN "Process timed out while try to close. Killing."
