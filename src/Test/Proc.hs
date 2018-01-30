@@ -78,8 +78,8 @@ startProc procname args = do
   (_, mstdout, _, pHandle) <- liftIO (createProcess_ procname p)
   mpid <- liftIO (getPid pHandle)
 
-  stdout <- maybe (fail "Could not open lightningd stdout") return mstdout
-  pid    <- maybe (fail "Could not grab lightningd pid") return mpid
+  stdout <- maybe (fail "Could not open process stdout") return mstdout
+  pid    <- maybe (fail "Could not grab process pid") return mpid
 
   let lnproc = Proc {
       procStdout = stdout
