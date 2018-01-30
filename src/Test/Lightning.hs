@@ -138,6 +138,6 @@ testln = runStderrLoggingT $
     btcproc' <- BTC.waitForLoaded btcproc
     withLightning btcproc' $ \(ln,lnproc) -> do
       let rpc = lightningRPC ln
-      _ <- waitForLoaded lnproc
+      _    <- waitForLoaded lnproc
       resp <- rpcRequest rpc ListPeers
       liftIO (print resp)
