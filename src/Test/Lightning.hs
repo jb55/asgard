@@ -19,8 +19,9 @@ import Network.RPC.Config
 import Regex.ToTDFA
 import Test.Proc
 import Test.Tailable
-import Test.Bitcoin (BitcoinProc(..))
+import Test.Bitcoin (BitcoinProc(..), withBitcoin)
 
+import qualified Test.Bitcoin as BTC
 import qualified Data.ByteString.Char8 as B8
 import qualified UnliftIO as UIO
 
@@ -130,9 +131,12 @@ withLightning _ cb = UIO.bracket start stop cb
       return (ln, lnproc)
     stop (_, LightningProc p) = stopProc p
 
-testln :: BitcoinProc Loaded Started -> IO ()
-testln btcproc = runStderrLoggingT $ withLightning btcproc $ \(ln,lnproc) -> do
-  let rpc = lightningRPC ln
-  _ <- waitForLoaded lnproc
-  resp <- liftIO (rpcRequest rpc ListPeers)
-  liftIO (print resp)
+testln :: IO ()
+testln = runStderrLoggingT $
+  withBitcoin $ \(_, btcproc) -> do
+    btcproc' <- BTC.waitForLoaded btcproc
+    withLightning btcproc' $ \(ln,lnproc) -> do
+      let rpc = lightningRPC ln
+      _ <- waitForLoaded lnproc
+      resp <- liftIO (rpcRequest rpc ListPeers)
+      liftIO (print resp)
