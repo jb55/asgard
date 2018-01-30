@@ -11,6 +11,7 @@ module Test.Tailable where
 import Control.Exception (SomeException)
 import Control.Monad (unless, foldM_)
 import Control.Monad (when)
+import Data.Monoid ((<>))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (StateT(..), MonadState(..), evalStateT)
 import Data.ByteString (hGetLine, ByteString)
@@ -18,9 +19,8 @@ import Data.Maybe (fromMaybe)
 import System.IO hiding (hGetLine)
 import Text.Regex.Base.RegexLike (matchTest)
 import Text.Regex.TDFA.ByteString (Regex)
+import Text.Regex.TDFA (makeRegex)
 import UnliftIO (MonadUnliftIO(..))
-
-import Regex.ToTDFA
 
 import qualified UnliftIO.Exception as UIO
 import qualified UnliftIO.Timeout as UIO
@@ -62,7 +62,7 @@ defaultTailable h =
   Tailable {
     tailHandle = h
   , tailLastPos = 0
-  , tailTimeout = 5000000
+  , tailTimeout = 10000000
   }
 
 untilM_ :: (Monad m) => m Bool -> m ()
@@ -80,19 +80,20 @@ waitForLogsH handle rs = liftIO $ foldM1_ folder rs
     readline     = hGetLine handle
     folder regex = untilM_ (matchTest regex <$> readline)
 
-waitForLogsM :: (MonadIO m, ToTDFA b) => [b] -> TailableM m (TailResult ())
+waitForLogsM :: MonadIO m => [ByteString] -> TailableM m (TailResult ())
 waitForLogsM rs = do
   t@Tailable{..} <- get
   isSeekable <- liftIO $ hIsSeekable tailHandle
   when isSeekable $
     liftIO $ hSeek tailHandle AbsoluteSeek tailLastPos
-  res <- liftIO $ timeout tailTimeout  $ wait tailHandle
+  res <- liftIO $ timeout tailTimeout timeoutMsg  $ wait tailHandle
   when isSeekable $ do
     pos <- liftIO $ hTell tailHandle
     put (t { tailLastPos = pos })
   return res
   where
-    regexes = map toTDFA rs
+    timeoutMsg = "Timeout waiting for: " <> B8.pack (show rs)
+    regexes = map makeRegex rs
     wait h = catching noMatchError (waitForLogsH h regexes)
 
 test :: IO ()
@@ -100,15 +101,14 @@ test = do
   writeFile "/tmp/haskelltest" "HI\nderp OPENINGD hey\nCHANNELD_NORMAL"
   h <- openFile "/tmp/haskelltest" ReadMode
   let tailable = defaultTailable h
-      rs       = map toTDFA [".*OPENINGD.*", ".*CHANNELD_NORMAL.*" :: ByteString]
-  _ <- runTailable tailable (waitForLogsM rs)
+  _ <- runTailable tailable (waitForLogsM [".*OPENINGD.*", ".*CHANNELD_NORMAL.*"])
   hClose h
 
 
-timeout :: MonadUnliftIO m => Int -> m (TailResult a) -> m (TailResult a)
-timeout tout io = do
+timeout :: MonadUnliftIO m => Int -> ByteString -> m (TailResult a) -> m (TailResult a)
+timeout tout msg io = do
   mres <- UIO.timeout tout io
-  return (fromMaybe (Left timeoutError) mres)
+  return (fromMaybe (Left (timeoutError msg)) mres)
 
 catching :: (MonadUnliftIO m, Monad m) => (ByteString -> a) -> m b -> m (Either a b)
 catching err io = UIO.catch newIO handler
@@ -126,8 +126,8 @@ tailErr err m = TailError err m
 tailErrStr :: TailErrorType -> ByteString -> TailError
 tailErrStr err s = TailError err (Just s)
 
-timeoutError :: TailError
-timeoutError = tailErr Timeout Nothing
+timeoutError :: ByteString -> TailError
+timeoutError = tailErrStr Timeout
 
 noMatchError :: ByteString -> TailError
 noMatchError = tailErrStr MatchError

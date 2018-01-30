@@ -68,7 +68,7 @@ newAddr =
       Just (pure (LightningEvent NewAddr))
 
     execute _ =
-      rpcRequest RPC.NewAddr
+      newAddr
   in
     Command gen execute [
         Update $ \s _i o ->
@@ -87,7 +87,7 @@ fundWallet =
         pure Spawn
 
     execute _ = do
-      rpc "sendtoaddress"
+      sendtoaddress
   in
     Command gen execute [
         Update $ \s _i o ->

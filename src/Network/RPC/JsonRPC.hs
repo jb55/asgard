@@ -81,3 +81,6 @@ call JsonRPC{..} method params =
         case JSON.eitherDecode body of
           Left e -> fail ("Could not decode JSON: \n\n" <> e <> "\n\n" <> show body )
           Right jrpcres  -> return (jrpcResult jrpcres)
+
+call_ :: (MonadIO m, FromJSON b) => JsonRPC -> Text -> m b
+call_ rpc method = call rpc method (mempty :: Array)

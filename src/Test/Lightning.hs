@@ -4,22 +4,26 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 import Control.Applicative ((<|>))
+import Control.Exception (try, SomeException)
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (async, wait)
 import Control.Lens
+import Control.Monad (replicateM_, void)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger
 import Data.ByteString (ByteString)
 import Data.Word (Word16)
 import Network.RPC (rpc, rpc_)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, removePathForcibly)
 import System.FilePath ((</>))
+import System.IO (hGetLine)
 import Text.Regex.TDFA
 import UnliftIO (MonadUnliftIO)
 
 import Network.RPC.CLightning
 import Network.RPC.Config
 import Regex.ToTDFA
-import Test.Bitcoin (BitcoinProc(..), withBitcoin)
+import Test.Bitcoin (BitcoinD(..), BitcoinProc(..), withBitcoin)
 import Test.Proc
 import Test.Tailable
 
@@ -133,16 +137,32 @@ withLightning _ cb = UIO.bracket start stop cb
       return (ln, lnproc)
     stop (_, LightningProc p) = stopProc p
 
+rmrf :: FilePath -> IO ()
+rmrf p = void (try (removePathForcibly p) :: IO (Either SomeException ()))
 
 testln :: IO ()
-testln = runStderrLoggingT $
-  withBitcoin $ \(_, btcproc) -> do
-    btcproc' <- BTC.waitForLoaded btcproc
-    withLightning btcproc' $ \(LightningD{..},lnproc@LightningProc{..}) -> do
-      let rpc = lightningRPC
-      _    <- waitForLoaded lnproc
-      peers <- listPeers rpc
-      addr <- newAddr rpc "bech32"
-      -- crashRestartProc lightningArgs lightningproc
-      -- liftIO (threadDelay (10 * 1000000))
-      liftIO (print (peers, addr))
+testln = do
+  rmrf "/tmp/lightningtest"
+  threadDelay 1000
+
+  runStderrLoggingT $
+    withBitcoin $ \(BitcoinD{..}, btcproc@(BitcoinProc bproc)) -> do
+      btcproc' <- BTC.waitForLoaded btcproc
+      BTC.setupBitcoin bitcoinRPC
+      withLightning btcproc' $ \(LightningD{..},lnproc@LightningProc{..}) -> do
+        let rpc       = lightningRPC
+            btcrpc    = bitcoinRPC
+            btcstdout = procStdout bproc
+            lnstdout  = procStdout lightningproc
+        _    <- waitForLoaded lnproc
+        peers <- listPeers rpc
+        addr <- newAddr rpc "bech32"
+        BTC.sendtoaddress btcrpc addr 1
+        moreblocks <- liftIO $ async (BTC.generateBlocks btcrpc 1)
+        waitForLog lnstdout "Owning output"
+        liftIO (wait moreblocks)
+        funds <- listFunds rpc
+        -- crashRestartProc lightningArgs lightningproc
+        -- liftIO (threadDelay (10 * 1000000))
+        liftIO (mapM_ print funds)
+        liftIO (print (peers, addr))
