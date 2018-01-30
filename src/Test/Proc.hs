@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE EmptyDataDecls #-}
 
 module Test.Proc where
 
@@ -18,7 +19,20 @@ import Text.Printf (printf)
 import qualified Data.Text as T
 import qualified System.Process as P
 
-data Proc =
+data Started
+data Stopped
+
+-- external stuff
+data Loading
+data Loaded
+
+instance Show Started  where show _ = "Started"
+instance Show Stopped  where show _ = "Stopped"
+
+instance Show Loading  where show _ = "Loading"
+instance Show Loaded   where show _ = "Loaded"
+
+data Proc a =
   Proc {
       procStdout :: Handle
     , procHandle :: ProcessHandle
@@ -26,7 +40,7 @@ data Proc =
     , procPID    :: CPid
     }
 
-instance Show Proc where
+instance Show (Proc a) where
   show Proc{..} =
       printf "%s [%d]" procName (fromIntegral procPID :: Int)
 
@@ -38,20 +52,23 @@ getPid ph = withProcessHandle ph go
                OpenHandle x   -> return $ Just x
                ClosedHandle _ -> return Nothing
 
-stopProc :: MonadLoggerIO m => Proc -> m ()
+stopProc :: MonadLoggerIO m => Proc Started -> m (Proc Stopped)
 stopProc proc@Proc{..} = do
   logInfoN ("Terminating " <> T.pack (show proc))
   liftIO $ terminateProcess procHandle
   ma <- liftIO $ timeout (30 * 1000000) (waitForProcess procHandle)
   maybe timedOut (return . const ()) ma
   liftIO $ hClose procStdout
+  -- coerce return type
+  return proc{ procName = procName }
   where
     timedOut :: MonadLoggerIO m => m ()
     timedOut = do
       logInfoN "Process timed out while try to close. Killing."
       liftIO (signalProcess 9 procPID)
 
-startProc :: (MonadUnliftIO m, MonadLoggerIO m) => String -> [String] -> m Proc
+startProc :: (MonadUnliftIO m, MonadLoggerIO m)
+          => String -> [String] -> m (Proc Started)
 startProc procname args = do
   let p = (P.proc procname args)
             { std_out = CreatePipe

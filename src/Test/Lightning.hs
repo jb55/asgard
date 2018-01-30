@@ -19,7 +19,7 @@ import Network.RPC.Config
 import Regex.ToTDFA
 import Test.Proc
 import Test.Tailable
-
+import Test.Bitcoin (BitcoinProc(..))
 
 import qualified Data.ByteString.Char8 as B8
 import qualified UnliftIO as UIO
@@ -40,7 +40,7 @@ data LightningD =
   } deriving Show
 
 
-newtype LightningProc = LightningProc { getLightningProc :: Proc }
+newtype LightningProc a b = LightningProc { lightningproc :: Proc b }
     deriving Show
 
 newtype Seed = Seed { hsmseed :: ByteString }
@@ -61,7 +61,7 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
         , "--lightning-dir=" ++ lightningdir
         , "--port=" ++ show port
         , "--allow-deprecated-apis=false"
-        , "--lightningd-poll=1s"
+        , "--bitcoind-poll=1s"
         , "--cltv-delta=6"
         , "--cltv-final=5"
         -- NOTE: this should only be set when DEVELOPER=1
@@ -101,34 +101,39 @@ initLightning hsm bd@BitcoinDir{..} ld@LightningDir{..} port = do
            }
 
 
-startLightning :: (MonadUnliftIO m, MonadLoggerIO m) => LightningD -> m LightningProc
-startLightning LightningD{..} =
+startLightning :: (MonadUnliftIO m, MonadLoggerIO m)
+               => LightningD
+               -> BitcoinProc Loaded Started
+               -> m (LightningProc Loading Started)
+startLightning LightningD{..} BitcoinProc{..} =
   fmap LightningProc (startProc "lightningd" lightningArgs)
 
 
 
-
-waitForLoaded :: MonadIO m => LightningProc -> m ()
-waitForLoaded (LightningProc Proc{..}) =
+waitForLoaded :: MonadIO m
+              => LightningProc Loading Started -> m (LightningProc Loaded Started)
+waitForLoaded lp@(LightningProc p@Proc{..}) = do
   waitForLog procStdout "Hello world from"
+  return lp{ lightningproc = p }
 
 
 
 withLightning :: (MonadUnliftIO m, MonadLoggerIO m)
-              => ((LightningD, LightningProc) -> m c) -> m c
-withLightning cb = UIO.bracket start stop cb
+              => BitcoinProc Loaded Started
+              -> ((LightningD, LightningProc Loading Started) -> m c) -> m c
+withLightning btcproc cb = UIO.bracket start stop cb
   where
     lightningDir = LightningDir "/tmp/lightningtest"
     bitcoinDir   = BitcoinDir "/tmp/bitcointest"
     start = do
       ln     <- initLightning RandomHSM bitcoinDir lightningDir 9785
-      lnproc <- startLightning ln
+      lnproc <- startLightning ln btcproc
       return (ln, lnproc)
     stop (_, LightningProc p) = stopProc p
 
-testln :: IO ()
-testln = runStderrLoggingT $ withLightning $ \(ln,lnproc) -> do
+testln :: BitcoinProc Loaded Started -> IO ()
+testln btcproc = runStderrLoggingT $ withLightning btcproc $ \(ln,lnproc) -> do
   let rpc = lightningRPC ln
-  waitForLoaded lnproc
+  _ <- waitForLoaded lnproc
   resp <- liftIO (rpcRequest rpc ListPeers)
   liftIO (print resp)

@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Test.BitcoinD  where
+module Test.Bitcoin where
 
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
@@ -28,7 +28,7 @@ import Test.JsonRPC
 import Test.Proc
 import Test.Tailable hiding (timeout)
 
-newtype BitcoinProc = BitcoinProc { getBitcoinProc :: Proc }
+newtype BitcoinProc a b = BitcoinProc { bitcoinproc :: Proc b }
     deriving Show
 
 data BitcoinD =
@@ -71,7 +71,8 @@ initBitcoin dir port = liftIO $ do
          }
 
 
-startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m) => BitcoinD -> m BitcoinProc
+startBitcoin :: (MonadUnliftIO m, MonadLoggerIO m)
+             => BitcoinD -> m (BitcoinProc Loading Started)
 startBitcoin BitcoinD{..} = fmap BitcoinProc (startProc "bitcoind" bitcoinArgs)
 
 
@@ -97,7 +98,7 @@ writeConfig file port = do
   hClose handle
 
 withBitcoin :: (MonadUnliftIO m, MonadLoggerIO m)
-            => ((BitcoinD, BitcoinProc) -> m c) -> m c
+            => ((BitcoinD, BitcoinProc Loading Started) -> m c) -> m c
 withBitcoin cb = UIO.bracket start stop cb
   where
     start = do
@@ -106,9 +107,11 @@ withBitcoin cb = UIO.bracket start stop cb
       return (btc, bproc)
     stop (_, BitcoinProc p) = stopProc p
 
-waitForLoaded :: MonadIO m => BitcoinProc -> m ()
-waitForLoaded (BitcoinProc Proc{..}) =
+waitForLoaded :: MonadIO m
+              => BitcoinProc Loading Started -> m (BitcoinProc Loaded Started)
+waitForLoaded btcproc@(BitcoinProc p@Proc{..}) = do
   waitForLog procStdout "Done loading"
+  return btcproc{ bitcoinproc = p }
 
 testbtc :: IO ()
 testbtc = runStderrLoggingT $ withBitcoin $ \(btc, BitcoinProc proc_) -> do
